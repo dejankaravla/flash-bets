@@ -64,7 +64,7 @@ export function LiveMatchArena({ fixtureId, mode }: { fixtureId: string; mode: F
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-50">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col bg-zinc-950 text-zinc-50">
       <LiveMatchHeader scores={scores} fixtureFresh={fixtureFresh} mode={mode} />
       {mode === "REPLAY" && replayState && <ReplayControls state={replayState} onState={setReplayState} />}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
@@ -73,13 +73,13 @@ export function LiveMatchArena({ fixtureId, mode }: { fixtureId: string; mode: F
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Prediction board</p>
             <h2 className="mt-1 text-xl font-semibold text-zinc-50">Five-minute markets</h2>
           </div>
-          <Link href="/dashboard" className="rounded-xl border border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-900">← Matches</Link>
+          <Link href="/dashboard" className="flex min-h-11 shrink-0 items-center rounded-xl border border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-900">← Matches</Link>
         </div>
 
         {(status === "error" || status === "closed") && (
-          <div role="status" className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
-            <p>Reconnecting to the match stream. The latest score remains visible, but markets stay locked if data becomes stale.</p>
-            <button type="button" onClick={retry} className="shrink-0 rounded-lg border border-amber-300/30 px-3 py-1.5 text-xs font-bold hover:bg-amber-300/10">Retry</button>
+          <div role="status" className="mb-4 flex flex-col items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-sm text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <p className="min-w-0 break-words">Reconnecting to the match stream. The latest score remains visible, but markets stay locked if data becomes stale.</p>
+            <button type="button" onClick={retry} className="min-h-11 w-full shrink-0 rounded-lg border border-amber-300/30 px-3 text-xs font-bold hover:bg-amber-300/10 sm:w-auto">Retry</button>
           </div>
         )}
         {!fixtureFresh && (
@@ -95,7 +95,7 @@ export function LiveMatchArena({ fixtureId, mode }: { fixtureId: string; mode: F
             <section className="col-span-full rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-5 text-sm text-red-200">
               <h3 className="font-semibold text-red-100">Markets could not be loaded</h3>
               <p className="mt-1">{marketsError}</p>
-              <button type="button" onClick={() => void refreshMarkets()} className="mt-4 min-h-10 rounded-lg border border-red-300/30 px-3 text-xs font-bold hover:bg-red-500/10">Try again</button>
+              <button type="button" onClick={() => void refreshMarkets()} className="mt-4 min-h-11 rounded-lg border border-red-300/30 px-3 text-xs font-bold hover:bg-red-500/10">Try again</button>
             </section>
           )}
           {!marketsLoading && !marketsError && markets.length === 0 && (

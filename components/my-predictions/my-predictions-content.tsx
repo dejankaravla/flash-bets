@@ -39,7 +39,7 @@ export function MyPredictionsContent() {
     }), [filter, predictions]);
 
   return (
-    <main className="mx-auto min-h-[calc(100vh-7rem)] w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+    <main className="mx-auto min-h-[calc(100vh-7rem)] min-h-[calc(100dvh-7rem)] w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Wallet history</p>
@@ -75,10 +75,10 @@ export function MyPredictionsContent() {
             </section>
           )}
 
-          <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-2" aria-label="Prediction filters">
+          <div className="mt-5 flex flex-wrap items-center gap-2" aria-label="Prediction filters">
             {FILTERS.map((value) => {
               const selected = filter === value;
-              return <button key={value} type="button" aria-pressed={selected} onClick={() => setFilter(value)} className={`min-h-10 shrink-0 rounded-full px-4 text-xs font-bold transition-colors ${selected ? "bg-emerald-500 text-zinc-950" : "border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"}`}>{FILTER_LABEL[value]}</button>;
+              return <button key={value} type="button" aria-pressed={selected} onClick={() => setFilter(value)} className={`min-h-11 rounded-full px-4 text-xs font-bold transition-colors ${selected ? "bg-emerald-500 text-zinc-950" : "border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"}`}>{FILTER_LABEL[value]}</button>;
             })}
             {loading && predictions.length > 0 && <span role="status" className="ml-auto shrink-0 text-xs text-zinc-500">Updating…</span>}
           </div>
@@ -87,7 +87,7 @@ export function MyPredictionsContent() {
             <section role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-4 text-sm text-red-200">
               <h2 className="font-semibold text-red-100">Prediction history is unavailable</h2>
               <p className="mt-1">{error}</p>
-              <button type="button" onClick={() => void refresh()} className="mt-4 min-h-10 rounded-lg border border-red-300/30 px-3 text-xs font-bold hover:bg-red-500/10">Try again</button>
+              <button type="button" onClick={() => void refresh()} className="mt-4 min-h-11 rounded-lg border border-red-300/30 px-3 text-xs font-bold hover:bg-red-500/10">Try again</button>
             </section>
           )}
 

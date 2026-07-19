@@ -95,7 +95,7 @@ export function DashboardContent({ fixtures, txLineConfigured, mode, sourceError
             : `There are no ${segment.toLowerCase()} matches right now. Choose another category or check again.`;
 
   return (
-    <main className="mx-auto min-h-[calc(100vh-7rem)] w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+    <main className="mx-auto min-h-[calc(100vh-7rem)] min-h-[calc(100dvh-7rem)] w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className={`text-xs font-bold uppercase tracking-[0.2em] ${mode === "REPLAY" ? "text-violet-300" : "text-emerald-400"}`}>
@@ -118,9 +118,9 @@ export function DashboardContent({ fixtures, txLineConfigured, mode, sourceError
       <SegmentFilter active={segment} onChange={setSegment} mode={mode} />
 
       {(error || sourceError) && (
-        <div role="alert" className="mt-5 flex items-start justify-between gap-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          <p>{error || emptyMessage}</p>
-          <button type="button" onClick={() => sourceError ? router.refresh() : setError(null)} aria-label={sourceError ? "Retry loading fixtures" : "Dismiss message"} className="shrink-0 rounded-lg border border-red-300/20 px-2.5 py-1 text-xs font-bold text-red-100 hover:bg-red-500/15">{sourceError ? "Retry" : "×"}</button>
+        <div role="alert" className="mt-5 flex items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p className="min-w-0 break-words">{error || emptyMessage}</p>
+          <button type="button" onClick={() => sourceError ? router.refresh() : setError(null)} aria-label={sourceError ? "Retry loading fixtures" : "Dismiss message"} className="min-h-11 min-w-11 shrink-0 rounded-lg border border-red-300/20 px-2.5 text-xs font-bold text-red-100 hover:bg-red-500/15">{sourceError ? "Retry" : "×"}</button>
         </div>
       )}
       {selecting && <p role="status" className="sr-only">Preparing replay</p>}

@@ -36,7 +36,7 @@ export function LandingHero({ mode }: { mode: FlashBetsMode }) {
   ];
 
   return (
-    <div className="relative flex min-h-[calc(100vh-34px)] flex-col overflow-hidden bg-zinc-950">
+    <div className="relative flex min-h-[calc(100vh-34px)] min-h-[calc(100dvh-34px)] min-w-0 flex-col overflow-hidden bg-zinc-950">
       <div
         className={`pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] ${
           mode === "REPLAY"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
@@ -16,6 +16,23 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
     [],
   );
+
+  useEffect(() => {
+    const labelCloseButton = () => {
+      const closeButton = document.querySelector<HTMLButtonElement>(".wallet-adapter-modal-button-close");
+      if (closeButton && !closeButton.getAttribute("aria-label")) {
+        closeButton.setAttribute("aria-label", "Close wallet dialog");
+      }
+      if (closeButton) {
+        closeButton.style.minHeight = "44px";
+        closeButton.style.minWidth = "44px";
+      }
+    };
+    const observer = new MutationObserver(labelCloseButton);
+    observer.observe(document.body, { childList: true, subtree: true });
+    labelCloseButton();
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>

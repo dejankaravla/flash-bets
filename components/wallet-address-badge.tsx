@@ -18,14 +18,14 @@ export function WalletAddressBadge() {
 
   if (!hasMounted) {
     return (
-      <button type="button" disabled className="min-h-9 rounded-full border border-zinc-700 px-3 text-xs font-semibold text-zinc-500">
+      <button type="button" disabled className="min-h-11 rounded-full border border-zinc-700 px-3 text-xs font-semibold text-zinc-500">
         Wallet
       </button>
     );
   }
   if (!connected || !publicKey) {
     return (
-      <WalletMultiButton className="!h-9 !min-h-9 !whitespace-nowrap !rounded-full !bg-emerald-500 !px-3 !text-xs !font-bold !text-zinc-950 hover:!bg-emerald-400" />
+      <WalletMultiButton className="!h-11 !min-h-11 !whitespace-nowrap !rounded-full !bg-emerald-500 !px-3 !text-xs !font-bold !text-zinc-950 hover:!bg-emerald-400" />
     );
   }
   if (!authenticated || !user) {
@@ -34,7 +34,7 @@ export function WalletAddressBadge() {
         type="button"
         disabled={loading}
         onClick={() => void signIn()}
-        className="min-h-9 rounded-full border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50"
+        className="min-h-11 rounded-full border border-emerald-500/40 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50"
       >
         {loading ? "Checking…" : "Sign in"}
       </button>
@@ -46,10 +46,10 @@ export function WalletAddressBadge() {
       type="button"
       onClick={() => void signOut()}
       title="Sign out of FlashBets"
-      className="min-h-9 rounded-full bg-emerald-500/15 px-3 text-right text-xs text-emerald-300 transition-colors hover:bg-emerald-500/25"
+      className="flex min-h-11 max-w-[calc(100vw-5.5rem)] min-w-0 items-center rounded-full bg-emerald-500/15 px-3 text-right text-xs text-emerald-300 transition-colors hover:bg-emerald-500/25"
     >
-      <span className="font-mono">{truncateAddress(publicKey.toBase58())}</span>
-      <span className="ml-2 font-semibold">{user.flashPoints.available} FP</span>
+      <span className="shrink-0 font-mono">{truncateAddress(publicKey.toBase58())}</span>
+      <span className="ml-2 truncate font-semibold">{user.flashPoints.available} FP</span>
     </button>
   );
 }

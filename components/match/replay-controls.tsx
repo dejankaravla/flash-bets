@@ -17,16 +17,41 @@ export function ReplayControls({ state, onState }: { state: ReplayState; onState
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!confirmRestart) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     confirmButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setConfirmRestart(false);
+      if (event.key === "Escape") {
+        setConfirmRestart(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
   }, [confirmRestart]);
 
   const control = async (action: "PLAY" | "PAUSE" | "RESTART" | "SPEED", speed?: number) => {
@@ -103,11 +128,13 @@ export function ReplayControls({ state, onState }: { state: ReplayState; onState
               </button>
               <button type="button" disabled={busy} onClick={() => setConfirmRestart(true)} className="min-h-11 rounded-xl border border-zinc-700 px-4 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40">Restart</button>
             </div>
-            <div className="flex flex-wrap items-center gap-1 sm:ml-auto" aria-label="Replay speed">
-              <span className="mr-2 text-xs text-zinc-500">Speed</span>
-              {REPLAY_SPEEDS.map((speed) => (
-                <button key={speed} type="button" disabled={busy} aria-pressed={state.speed === speed} aria-label={`${speed} times replay speed`} onClick={() => void control("SPEED", speed)} className={`min-h-9 min-w-10 rounded-lg px-2 text-xs font-bold transition-colors ${state.speed === speed ? "bg-violet-300 text-zinc-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}>{speed}×</button>
-              ))}
+            <div className="w-full sm:ml-auto sm:w-auto">
+              <span className="mb-2 block text-xs text-zinc-500">Speed</span>
+              <div className="grid grid-cols-5 gap-1" aria-label="Replay speed">
+                {REPLAY_SPEEDS.map((speed) => (
+                  <button key={speed} type="button" disabled={busy} aria-pressed={state.speed === speed} aria-label={`${speed} times replay speed`} onClick={() => void control("SPEED", speed)} className={`min-h-11 min-w-0 rounded-lg px-1 text-xs font-bold transition-colors ${state.speed === speed ? "bg-violet-300 text-zinc-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}>{speed}×</button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -117,8 +144,8 @@ export function ReplayControls({ state, onState }: { state: ReplayState; onState
       </div>
 
       {confirmRestart && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 px-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setConfirmRestart(false)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="restart-title" aria-describedby="restart-description" className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/75 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-sm" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setConfirmRestart(false)}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="restart-title" aria-describedby="restart-description" className="max-h-full w-full max-w-sm overflow-y-auto rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-300">New replay run</p>
             <h2 id="restart-title" className="mt-2 text-xl font-semibold text-zinc-50">Restart this replay?</h2>
             <p id="restart-description" className="mt-3 text-sm leading-6 text-zinc-400">Unfinished markets from this run will be voided, locked FlashPoints will be refunded, and permanent receipts will be created before a fresh run starts.</p>

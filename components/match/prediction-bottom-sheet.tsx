@@ -18,6 +18,7 @@ export function PredictionBottomSheet({ market, onClose }: { market: Market; onC
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const submittingRef = useRef(false);
   const available = user?.flashPoints.available ?? 0;
@@ -27,16 +28,35 @@ export function PredictionBottomSheet({ market, onClose }: { market: Market; onC
   }, [submitting]);
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButtonRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !submittingRef.current) onClose();
+      if (event.key === "Escape" && !submittingRef.current) {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", onKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [onClose]);
 
@@ -79,13 +99,13 @@ export function PredictionBottomSheet({ market, onClose }: { market: Market; onC
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center sm:px-4">
       <button type="button" aria-label="Close prediction dialog" className="absolute inset-0 bg-black/75 backdrop-blur-sm" disabled={submitting} onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="prediction-title" aria-describedby="prediction-description" className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-zinc-700 bg-zinc-900 px-5 pb-8 pt-5 shadow-2xl sm:rounded-3xl sm:p-7" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="prediction-title" aria-describedby="prediction-description" className="relative max-h-[calc(100dvh-env(safe-area-inset-top)-0.75rem)] w-full max-w-lg overscroll-contain overflow-y-auto rounded-t-3xl border border-zinc-700 bg-zinc-900 px-5 pb-8 pt-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl sm:p-7" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Prediction</p>
             <h2 id="prediction-title" className="mt-1 text-xl font-semibold text-zinc-50">Choose your outcome</h2>
           </div>
-          <button ref={closeButtonRef} type="button" disabled={submitting} onClick={onClose} aria-label="Close prediction dialog" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-xl text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">×</button>
+          <button ref={closeButtonRef} type="button" disabled={submitting} onClick={onClose} aria-label="Close prediction dialog" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-zinc-800 text-xl text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">×</button>
         </div>
 
         <div id="prediction-description" className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -119,21 +139,21 @@ export function PredictionBottomSheet({ market, onClose }: { market: Market; onC
             </fieldset>
 
             <div className="mt-6">
-              <label htmlFor="prediction-stake" className="flex justify-between gap-3 text-sm font-medium text-zinc-300"><span>Stake</span><span className="text-zinc-400">{user ? <><strong className="text-emerald-300">{available}</strong> available</> : "Sign in to view balance"}</span></label>
+              <label htmlFor="prediction-stake" className="flex justify-between gap-3 text-sm font-medium text-zinc-300"><span className="shrink-0">Stake</span><span className="min-w-0 break-words text-right text-zinc-400">{user ? <><strong className="text-emerald-300">{available}</strong> available</> : "Sign in to view balance"}</span></label>
               <div className="relative mt-2">
                 <input id="prediction-stake" type="number" min={1} max={available || undefined} step={1} inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!authenticated || submitting} aria-describedby="stake-help" className="min-h-14 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 pr-14 text-lg font-mono text-zinc-50 outline-none focus:border-emerald-500 disabled:opacity-50" />
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">FP</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2" aria-label="Quick stake amounts">
-                {quickStakes.map((value) => <button key={value} type="button" disabled={!authenticated || submitting} onClick={() => setAmount(String(value))} className="min-h-9 rounded-lg bg-zinc-800 px-3 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">{value === available ? `Max ${value}` : value}</button>)}
+                {quickStakes.map((value) => <button key={value} type="button" disabled={!authenticated || submitting} onClick={() => setAmount(String(value))} className="min-h-11 min-w-11 rounded-lg bg-zinc-800 px-3 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">{value === available ? `Max ${value}` : value}</button>)}
               </div>
               <p id="stake-help" className="mt-3 text-xs leading-5 text-zinc-500">FlashPoints are whole-number demo points. They cannot be purchased, transferred, withdrawn, or redeemed.</p>
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 text-center text-xs">
-              <div><span className="block text-zinc-500">Selection</span><strong className={selection === "YES" ? "mt-1 block text-emerald-300" : "mt-1 block text-red-300"}>{selection}</strong></div>
-              <div><span className="block text-zinc-500">Stake</span><strong className="mt-1 block text-zinc-200">{amount || 0} FP</strong></div>
-              <div><span className="block text-zinc-500">After lock</span><strong className="mt-1 block text-zinc-200">{Math.max(0, available - (Number(amount) || 0))} FP</strong></div>
+              <div className="min-w-0"><span className="block text-zinc-500">Selection</span><strong className={selection === "YES" ? "mt-1 block break-words text-emerald-300" : "mt-1 block break-words text-red-300"}>{selection}</strong></div>
+              <div className="min-w-0"><span className="block text-zinc-500">Stake</span><strong className="mt-1 block break-words text-zinc-200">{amount || 0} FP</strong></div>
+              <div className="min-w-0"><span className="block text-zinc-500">After lock</span><strong className="mt-1 block break-words text-zinc-200">{Math.max(0, available - (Number(amount) || 0))} FP</strong></div>
             </div>
 
             {error && <p role="alert" className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-3 text-sm text-red-200">{error}</p>}

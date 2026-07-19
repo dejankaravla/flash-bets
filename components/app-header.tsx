@@ -24,10 +24,10 @@ export function AppHeader({ mode }: { mode: FlashBetsMode }) {
 
   return (
     <header className="border-b border-zinc-800/80 bg-zinc-950/95">
-      <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6">
         <Link
           href="/dashboard"
-          className="flex shrink-0 items-center gap-2 rounded-lg text-zinc-50"
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg text-zinc-50 sm:justify-start"
           aria-label="FlashBets matches"
         >
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500 text-sm font-black text-zinc-950 shadow-lg shadow-emerald-500/20">
@@ -44,7 +44,7 @@ export function AppHeader({ mode }: { mode: FlashBetsMode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                className={`inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                   active
                     ? "bg-zinc-800 text-zinc-50"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"

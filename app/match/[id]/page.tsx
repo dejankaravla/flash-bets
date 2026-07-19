@@ -15,7 +15,7 @@ export default async function MatchPage({ params }: MatchPageProps) {
   const { id } = await params;
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-zinc-950">
       <LiveMatchArena key={id} fixtureId={id} mode={flashBetsMode()} />
     </div>
   );

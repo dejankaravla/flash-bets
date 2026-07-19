@@ -117,12 +117,12 @@ export function BottomNav() {
               key={item.id}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1 text-xs font-medium transition-colors ${
+              className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-xs font-medium transition-colors ${
                 active ? "text-emerald-400" : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               <NavIcon item={item} active={active} />
-              <span>{item.label}</span>
+              <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
         })}

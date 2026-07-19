@@ -19,7 +19,7 @@ export function NavShell({ children, mode }: NavShellProps) {
     <>
       <SolanaWalletProvider>
         {showNav && <AppHeader mode={mode} />}
-        <div className={showNav ? "pb-24 md:pb-0" : undefined}>{children}</div>
+        <div className={showNav ? "pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0" : undefined}>{children}</div>
         {showNav && <BottomNav />}
       </SolanaWalletProvider>
     </>

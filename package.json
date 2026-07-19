@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate:mongo": "tsx scripts/migrate-json-to-mongodb.ts",
     "test:standalone": "node scripts/run-settlement-tests.mjs",
     "test:settlement": "node scripts/run-settlement-tests.mjs",
     "test:replay": "node scripts/run-settlement-tests.mjs",

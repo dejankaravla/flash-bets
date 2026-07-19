@@ -23,6 +23,8 @@
 }
 
 html {
+  min-height: 100%;
+  overflow-x: clip;
   scroll-padding-top: 1rem;
 }
 
@@ -30,7 +32,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-flashbets-sans);
+  min-height: 100dvh;
   min-width: 320px;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
 }
 
@@ -88,6 +92,14 @@ summary {
   background: #18181b !important;
   border: 1px solid #27272a !important;
   border-radius: 1rem !important;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem) !important;
+  max-width: calc(100vw - 1rem) !important;
+  overflow-y: auto !important;
+}
+
+.wallet-adapter-modal-button-close {
+  height: 2.75rem !important;
+  width: 2.75rem !important;
 }
 
 .wallet-adapter-modal-title {
