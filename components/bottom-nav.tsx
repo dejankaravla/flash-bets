@@ -63,65 +63,38 @@ function MyBetsIcon({ active }: { active: boolean }) {
   );
 }
 
-function LeaderboardIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={active ? 2.5 : 2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M16 8v8m-4-5v5m-4-2v2M3 20h18M5 20V9.5a.5.5 0 01.5-.5h13a.5.5 0 01.5.5V20"
-      />
-    </svg>
-  );
-}
-
 const NAV_ITEMS: NavItem[] = [
   {
-    id: "dashboard",
-    label: "Dashboard",
-    href: "/dashboard",
-    isActive: (p) => p === "/dashboard",
+    id: "overview",
+    label: "Overview",
+    href: "/",
+    isActive: (p) => p === "/",
     icon: <DashboardIcon active={false} />,
   },
   {
-    id: "live-match",
-    label: "Live Match",
+    id: "matches",
+    label: "Matches",
     href: "/dashboard",
-    isActive: (p) => p.startsWith("/match/"),
+    isActive: (p) => p === "/dashboard" || p.startsWith("/match/"),
     icon: <LiveMatchIcon active={false} />,
   },
   {
-    id: "my-bets",
-    label: "My Bets",
-    href: "/my-bets",
-    isActive: (p) => p === "/my-bets",
+    id: "my-predictions",
+    label: "My Predictions",
+    href: "/my-predictions",
+    isActive: (p) => p === "/my-predictions" || p === "/my-bets",
     icon: <MyBetsIcon active={false} />,
-  },
-  {
-    id: "leaderboard",
-    label: "Leaderboard",
-    href: "/leaderboard",
-    isActive: (p) => p === "/leaderboard",
-    icon: <LeaderboardIcon active={false} />,
   },
 ];
 
 function NavIcon({ item, active }: { item: NavItem; active: boolean }) {
   switch (item.label) {
-    case "Dashboard":
+    case "Overview":
       return <DashboardIcon active={active} />;
-    case "Live Match":
+    case "Matches":
       return <LiveMatchIcon active={active} />;
-    case "My Bets":
+    case "My Predictions":
       return <MyBetsIcon active={active} />;
-    case "Leaderboard":
-      return <LeaderboardIcon active={active} />;
     default:
       return item.icon;
   }
@@ -132,8 +105,9 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      aria-label="Mobile navigation"
     >
       <div className="mx-auto flex max-w-md items-stretch justify-around px-2 pt-2 pb-2">
         {NAV_ITEMS.map((item) => {
@@ -142,7 +116,8 @@ export function BottomNav() {
             <Link
               key={item.id}
               href={item.href}
-              className={`flex flex-1 flex-col items-center gap-1 py-1 text-xs font-medium transition-colors ${
+              aria-current={active ? "page" : undefined}
+              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1 text-xs font-medium transition-colors ${
                 active ? "text-emerald-400" : "text-zinc-500 hover:text-zinc-300"
               }`}
             >

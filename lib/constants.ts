@@ -1,1 +1,0 @@
-export const MOCK_FIXTURE_ID = 20260001;

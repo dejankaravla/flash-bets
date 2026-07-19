@@ -2,11 +2,9 @@ import {
   GAME_PHASE,
   STAT_KEY,
   type MatchEvent,
-  type MatchEventType,
-  type TxLineOddsMarket,
-  type TxLineOddsUpdate,
   type TxLineScoresUpdate,
 } from "@/lib/types/txline";
+import type { MatchPhase } from "@/lib/domain/flash-bets";
 
 /** Raw TxLINE scores SSE payload (camelCase + PascalCase fields). */
 export interface RawTxLineScores {
@@ -57,24 +55,6 @@ interface RawSoccerData {
   playerId?: number;
 }
 
-/** Raw TxLINE odds SSE payload. */
-export interface RawTxLineOdds {
-  FixtureId?: number;
-  fixtureId?: number;
-  MessageId?: string;
-  messageId?: string;
-  Ts?: number;
-  ts?: number;
-  SuperOddsType?: string;
-  superOddsType?: string;
-  PriceNames?: string[];
-  priceNames?: string[];
-  Prices?: number[];
-  prices?: number[];
-  Seq?: number;
-  seq?: number;
-}
-
 const GAME_STATE_MAP: Record<string, number> = {
   NS: GAME_PHASE.NS,
   H1: GAME_PHASE.H1,
@@ -87,27 +67,67 @@ const GAME_STATE_MAP: Record<string, number> = {
   AET: GAME_PHASE.F,
 };
 
-function readFixtureId(raw: RawTxLineScores | RawTxLineOdds): number | null {
-  const id =
-    ("fixtureId" in raw ? raw.fixtureId : undefined) ??
-    ("FixtureId" in raw ? raw.FixtureId : undefined);
-  return typeof id === "number" ? id : null;
-}
+const MATCH_PHASE_MAP: Record<string, MatchPhase> = {
+  NS: "NOT_STARTED",
+  NOT_STARTED: "NOT_STARTED",
+  SCHEDULED: "NOT_STARTED",
+  PREMATCH: "NOT_STARTED",
+  H1: "FIRST_HALF",
+  FIRST_HALF: "FIRST_HALF",
+  HT: "HALFTIME",
+  HALFTIME: "HALFTIME",
+  H2: "SECOND_HALF",
+  SECOND_HALF: "SECOND_HALF",
+  F: "FINISHED",
+  FT: "FINISHED",
+  FET: "FINISHED",
+  FPE: "FINISHED",
+  AET: "FINISHED",
+  FINISHED: "FINISHED",
+  SUSPENDED: "SUSPENDED",
+  PAUSED: "SUSPENDED",
+  INTERRUPTED: "SUSPENDED",
+  DELAYED: "SUSPENDED",
+  POSTPONED: "POSTPONED",
+  ABANDONED: "ABANDONED",
+  CANCELLED: "ABANDONED",
+};
 
-function parseGameState(raw: RawTxLineScores): number {
+function readSourceState(raw: RawTxLineScores): string | null {
   const explicit = raw.gameState ?? raw.GameState;
-  if (explicit && GAME_STATE_MAP[explicit] !== undefined) {
-    return GAME_STATE_MAP[explicit]!;
+  if (typeof explicit === "string" && explicit.trim()) {
+    return explicit.trim().toUpperCase();
   }
 
   const status = raw.statusSoccerId;
   if (status && typeof status === "object" && !Array.isArray(status)) {
     const key = Object.keys(status)[0];
-    if (key && GAME_STATE_MAP[key] !== undefined) {
-      return GAME_STATE_MAP[key]!;
-    }
+    if (key) return key.trim().toUpperCase();
   }
+  if (typeof status === "string" && status.trim()) {
+    return status.trim().toUpperCase();
+  }
+  return null;
+}
 
+function parseMatchPhase(raw: RawTxLineScores): MatchPhase {
+  const state = readSourceState(raw);
+  return state ? (MATCH_PHASE_MAP[state] ?? "UNKNOWN") : "UNKNOWN";
+}
+
+function readFixtureId(raw: RawTxLineScores): number | null {
+  const id = raw.fixtureId ?? raw.FixtureId;
+  return typeof id === "number" ? id : null;
+}
+
+function parseGameState(raw: RawTxLineScores): number {
+  const state = readSourceState(raw);
+  if (state && GAME_STATE_MAP[state] !== undefined) return GAME_STATE_MAP[state]!;
+  const phase = parseMatchPhase(raw);
+  if (phase === "FIRST_HALF") return GAME_PHASE.H1;
+  if (phase === "HALFTIME") return GAME_PHASE.HT;
+  if (phase === "SECOND_HALF") return GAME_PHASE.H2;
+  if (phase === "FINISHED") return GAME_PHASE.F;
   return GAME_PHASE.NS;
 }
 
@@ -145,9 +165,6 @@ function buildStats(
     stats[STAT_KEY.P2_GOALS] = p2Goals;
   }
 
-  if (stats[STAT_KEY.P1_GOALS] === undefined) stats[STAT_KEY.P1_GOALS] = 0;
-  if (stats[STAT_KEY.P2_GOALS] === undefined) stats[STAT_KEY.P2_GOALS] = 0;
-
   void participants;
   return stats;
 }
@@ -156,10 +173,8 @@ function parseEvent(raw: RawTxLineScores): MatchEvent | undefined {
   const soccer = raw.dataSoccer ?? raw.DataSoccer;
   if (!soccer) return undefined;
 
-  let type: MatchEventType | null = null;
+  let type: MatchEvent["type"] | null = null;
   if (soccer.Goal || soccer.goal) type = "goal";
-  else if (soccer.YellowCard || soccer.yellowCard) type = "yellow_card";
-  else if (soccer.RedCard || soccer.redCard) type = "red_card";
   else if (soccer.Corner || soccer.corner) type = "corner";
 
   if (!type) return undefined;
@@ -170,12 +185,6 @@ function parseEvent(raw: RawTxLineScores): MatchEvent | undefined {
   return { type, teamIndex };
 }
 
-function decodeOddsPrice(raw: number): number {
-  if (raw <= 0) return 1.01;
-  if (raw >= 100) return raw / 100;
-  return raw;
-}
-
 export function normalizeScoresUpdate(
   raw: RawTxLineScores,
   participants: [string, string],
@@ -184,79 +193,35 @@ export function normalizeScoresUpdate(
   if (fixtureId === null) return null;
 
   const seq = raw.seq ?? raw.Seq ?? 0;
-  const ts = raw.ts ?? raw.Ts ?? Date.now();
+  const rawTimestamp = raw.ts ?? raw.Ts;
+  const ts = rawTimestamp ?? Date.now();
+  const stats = buildStats(raw, participants);
+  const availableStats = Object.keys(stats)
+    .map(Number)
+    .filter((key) => Number.isFinite(key));
+  const matchPhase = parseMatchPhase(raw);
+  const requiredStats = [
+    STAT_KEY.P1_GOALS,
+    STAT_KEY.P2_GOALS,
+    STAT_KEY.P1_CORNERS,
+    STAT_KEY.P2_CORNERS,
+  ];
 
   return {
     fixtureId,
     seq,
     ts,
     gameState: parseGameState(raw),
+    matchPhase,
+    sourceState: readSourceState(raw),
+    sourceTimestampTrusted: typeof rawTimestamp === "number",
     matchMinute: parseMatchMinute(raw),
     participants,
-    stats: buildStats(raw, participants),
+    stats,
+    availableStats,
+    isComplete:
+      matchPhase !== "UNKNOWN" &&
+      requiredStats.every((key) => availableStats.includes(key)),
     event: parseEvent(raw),
   };
-}
-
-export function normalizeOddsLine(
-  raw: RawTxLineOdds,
-): { fixtureId: number; market: TxLineOddsMarket; seq: number; ts: number } | null {
-  const fixtureId = readFixtureId(raw);
-  if (fixtureId === null) return null;
-
-  const marketId = raw.SuperOddsType ?? raw.superOddsType ?? "unknown";
-  const names = raw.PriceNames ?? raw.priceNames ?? [];
-  const prices = raw.Prices ?? raw.prices ?? [];
-
-  const selections = names.map((name, index) => ({
-    name,
-    price: decodeOddsPrice(prices[index] ?? 0),
-  }));
-
-  if (selections.length === 0) return null;
-
-  return {
-    fixtureId,
-    market: { marketId, selections },
-    seq: raw.seq ?? raw.Seq ?? 0,
-    ts: raw.ts ?? raw.Ts ?? Date.now(),
-  };
-}
-
-export function mergeOddsUpdate(
-  existing: TxLineOddsUpdate | undefined,
-  line: { fixtureId: number; market: TxLineOddsMarket; seq: number; ts: number },
-): TxLineOddsUpdate {
-  const markets = [...(existing?.markets ?? [])];
-  const index = markets.findIndex((m) => m.marketId === line.market.marketId);
-
-  if (index >= 0) {
-    markets[index] = line.market;
-  } else {
-    markets.push(line.market);
-  }
-
-  return {
-    fixtureId: line.fixtureId,
-    seq: Math.max(existing?.seq ?? 0, line.seq),
-    ts: line.ts,
-    markets,
-  };
-}
-
-export function gameStateFromString(state: string | undefined): number {
-  if (!state) return GAME_PHASE.NS;
-  return GAME_STATE_MAP[state] ?? GAME_PHASE.NS;
-}
-
-export function isInPlayGameState(gameState: number): boolean {
-  return (
-    gameState === GAME_PHASE.H1 ||
-    gameState === GAME_PHASE.HT ||
-    gameState === GAME_PHASE.H2
-  );
-}
-
-export function isFinishedGameState(gameState: number): boolean {
-  return gameState === GAME_PHASE.F;
 }

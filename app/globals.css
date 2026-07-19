@@ -1,15 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --font-flashbets-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-flashbets-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-flashbets-sans);
+  --font-mono: var(--font-flashbets-mono);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,10 +22,61 @@
   }
 }
 
+html {
+  scroll-padding-top: 1rem;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-flashbets-sans);
+  min-width: 320px;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+select,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.3);
+  color: #ffffff;
+}
+
+.skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, #18181b 20%, #27272a 50%, #18181b 80%);
+  background-size: 200% 100%;
+}
+
+@keyframes skeleton-pulse {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Wallet adapter dark theme overrides */
@@ -50,7 +104,7 @@ body {
 }
 
 .wallet-adapter-button {
-  font-family: var(--font-geist-sans), sans-serif !important;
+  font-family: var(--font-flashbets-sans) !important;
 }
 
 .wallet-adapter-button-trigger {

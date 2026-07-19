@@ -1,193 +1,153 @@
 "use client";
 
-import { useConnection } from "@solana/wallet-adapter-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
-import { formatWindowLabel, type MicroMarket } from "@/lib/micro-markets";
-import { useAnchorProgram } from "@/lib/hooks/use-anchor-program";
-import { MIN_DEPOSIT_TOKENS, TOKEN_SCALE } from "@/lib/txoracle/constants";
-import {
-  formatTxError,
-  submitCreateIntent,
-} from "@/lib/txoracle/create-intent";
-import { truncateAddress } from "@/lib/wallet";
+import type { Market, PredictionSelection } from "@/lib/domain/flash-bets";
+import { readApiError } from "@/lib/client-errors";
+import { useWalletAuth } from "@/lib/hooks/use-wallet-auth";
+import { formatWindowLabel } from "@/lib/micro-markets";
 
-type TxPhase =
-  | "idle"
-  | "building"
-  | "awaiting_wallet"
-  | "confirming"
-  | "success"
-  | "error";
+export function PredictionBottomSheet({ market, onClose }: { market: Market; onClose: () => void }) {
+  const { connected } = useWallet();
+  const { authenticated, user, loading: authLoading, signIn, refresh } = useWalletAuth();
+  const [selection, setSelection] = useState<PredictionSelection>("YES");
+  const [amount, setAmount] = useState("50");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const submittingRef = useRef(false);
+  const available = user?.flashPoints.available ?? 0;
 
-interface PredictionBottomSheetProps {
-  fixtureId: string;
-  market: MicroMarket;
-  gameState: number;
-  estimatedMatchSeconds: number;
-  matchLabel?: string;
-  onClose: () => void;
-  onConfirm: (selection: "yes" | "no", amount: number, txSignature?: string) => void;
-}
+  useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
 
-export function PredictionBottomSheet({
-  fixtureId,
-  market,
-  gameState,
-  estimatedMatchSeconds,
-  matchLabel,
-  onClose,
-  onConfirm,
-}: PredictionBottomSheetProps) {
-  const { connection } = useConnection();
-  const { program, ready, publicKey } = useAnchorProgram();
-  const [selection, setSelection] = useState<"yes" | "no">("yes");
-  const [amount, setAmount] = useState("10");
-  const [phase, setPhase] = useState<TxPhase>("idle");
-  const [walletError, setWalletError] = useState<string | null>(null);
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submittingRef.current) onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
 
-  const isBusy = phase !== "idle" && phase !== "error";
-
-  const handleConfirm = async () => {
-    if (isBusy) return;
-
-    const parsed = parseFloat(amount);
-    if (Number.isNaN(parsed) || parsed <= 0) return;
-
-    const depositRaw = Math.floor(parsed * TOKEN_SCALE);
-    if (depositRaw < MIN_DEPOSIT_TOKENS) {
-      setWalletError("Minimum deposit is 1 TxL");
+  const submit = async () => {
+    if (submitting) return;
+    const flashPoints = Number(amount);
+    if (!Number.isSafeInteger(flashPoints) || flashPoints <= 0) {
+      setError("Enter a positive whole number of FlashPoints.");
+      return;
+    }
+    if (flashPoints > available) {
+      setError(`You have ${available} available FlashPoints. Lower the stake and try again.`);
       return;
     }
 
-    if (!ready || !publicKey || !program) {
-      setWalletError("Connect your wallet to place a prediction");
-      return;
-    }
-
-    setWalletError(null);
-    setPhase("building");
-
+    setSubmitting(true);
+    setError(null);
     try {
-      setPhase("awaiting_wallet");
-      const { signature } = await submitCreateIntent({
-        program,
-        maker: publicKey,
-        connection,
-        fixtureId: Number(fixtureId),
-        market,
-        gameState,
-        selection,
-        amountTxl: parsed,
-        estimatedMatchSeconds,
-        matchLabel,
+      const response = await fetch("/api/predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketId: market.marketId, side: selection, amount: flashPoints }),
       });
-
-      setPhase("confirming");
-      setPhase("success");
-      onConfirm(selection, parsed, signature);
-      onClose();
-    } catch (error) {
-      setPhase("error");
-      setWalletError(formatTxError(error));
+      if (!response.ok) {
+        const message = await readApiError(response, "Your prediction could not be placed. Try again.");
+        if (response.status === 401) await refresh();
+        throw new Error(message);
+      }
+      await refresh();
+      setSaved(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your prediction could not be placed. Try again.");
     } finally {
-      setPhase("idle");
+      setSubmitting(false);
     }
   };
 
-  const buttonLabel = (() => {
-    switch (phase) {
-      case "building":
-        return "Building transaction…";
-      case "awaiting_wallet":
-        return "Approve in wallet…";
-      case "confirming":
-        return "Confirming on-chain…";
-      default:
-        return "Confirm Prediction (TxL)";
-    }
-  })();
+  const quickStakes = [25, 50, 100, available].filter((value, index, values) => value > 0 && values.indexOf(value) === index);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center">
-      <button
-        type="button"
-        aria-label="Close"
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      <div
-        className="relative w-full max-w-md rounded-t-3xl border border-zinc-800 bg-zinc-900 px-5 pb-8 pt-4 shadow-2xl transition-transform duration-300"
-        style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
-      >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-zinc-700" />
-
-        <h2 className="text-lg font-semibold text-zinc-50">Place Prediction</h2>
-        <p className="mt-1 text-sm text-zinc-400">
-          {formatWindowLabel(market.windowStart, market.windowEnd)} ·{" "}
-          {market.proposition}
-        </p>
-        {publicKey && (
-          <p className="mt-1 font-mono text-xs text-zinc-600">
-            {truncateAddress(publicKey.toBase58())}
-          </p>
-        )}
-
-        {walletError && (
-          <p className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
-            {walletError}
-          </p>
-        )}
-
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setSelection("yes")}
-            disabled={isBusy}
-            className={`rounded-xl py-4 text-base font-bold transition-colors ${
-              selection === "yes"
-                ? "bg-emerald-500 text-white"
-                : "border border-zinc-700 bg-zinc-800 text-zinc-300"
-            }`}
-          >
-            YES
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelection("no")}
-            disabled={isBusy}
-            className={`rounded-xl py-4 text-base font-bold transition-colors ${
-              selection === "no"
-                ? "bg-red-500 text-white"
-                : "border border-zinc-700 bg-zinc-800 text-zinc-300"
-            }`}
-          >
-            NO
-          </button>
+    <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center sm:px-4">
+      <button type="button" aria-label="Close prediction dialog" className="absolute inset-0 bg-black/75 backdrop-blur-sm" disabled={submitting} onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-labelledby="prediction-title" aria-describedby="prediction-description" className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-zinc-700 bg-zinc-900 px-5 pb-8 pt-5 shadow-2xl sm:rounded-3xl sm:p-7" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Prediction</p>
+            <h2 id="prediction-title" className="mt-1 text-xl font-semibold text-zinc-50">Choose your outcome</h2>
+          </div>
+          <button ref={closeButtonRef} type="button" disabled={submitting} onClick={onClose} aria-label="Close prediction dialog" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-zinc-800 text-xl text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">×</button>
         </div>
 
-        <label className="mt-6 block">
-          <span className="text-sm font-medium text-zinc-400">TxL Amount</span>
-          <input
-            type="number"
-            min={1}
-            step={0.01}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={isBusy}
-            className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-lg font-mono text-zinc-50 outline-none focus:border-emerald-500 disabled:opacity-50"
-          />
-        </label>
+        <div id="prediction-description" className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="font-bold uppercase tracking-wider text-zinc-400">{formatWindowLabel(market.startMinute, market.endMinute)}</span>
+            <span className="rounded-md bg-zinc-800 px-2 py-1 font-bold text-zinc-300">{market.type}</span>
+          </div>
+          <p className="mt-3 font-semibold leading-6 text-zinc-100">{market.question}</p>
+        </div>
 
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={isBusy}
-          className="mt-6 w-full rounded-xl bg-emerald-500 py-4 text-base font-bold text-white transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {buttonLabel}
-        </button>
+        {saved ? (
+          <div className="mt-6 text-center" aria-live="polite">
+            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-500/15 text-2xl text-emerald-300" aria-hidden>✓</span>
+            <h3 className="mt-4 text-xl font-semibold text-zinc-50">Prediction accepted</h3>
+            <p className="mt-2 text-sm leading-6 text-zinc-300"><strong>{amount} FlashPoints</strong> are locked on <strong>{selection}</strong> until this market settles or is voided.</p>
+            <p className="mt-2 text-xs text-zinc-500">Settlement is automatic. You can safely close this screen.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <Link href="/my-predictions" className="flex min-h-12 items-center justify-center rounded-xl bg-emerald-500 px-4 font-bold text-zinc-950 hover:bg-emerald-400">View My Predictions</Link>
+              <button type="button" onClick={onClose} className="min-h-12 rounded-xl border border-zinc-700 px-4 font-semibold text-zinc-200 hover:bg-zinc-800">Back to markets</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <fieldset className="mt-6">
+              <legend className="text-sm font-semibold text-zinc-300">Will it happen?</legend>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                {(["YES", "NO"] as const).map((value) => (
+                  <button key={value} type="button" aria-pressed={selection === value} onClick={() => setSelection(value)} className={`min-h-14 rounded-xl text-base font-bold transition-colors ${selection === value ? value === "YES" ? "bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-950/30" : "bg-red-500 text-white shadow-lg shadow-red-950/30" : "border border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-500"}`}>{value}</button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="mt-6">
+              <label htmlFor="prediction-stake" className="flex justify-between gap-3 text-sm font-medium text-zinc-300"><span>Stake</span><span className="text-zinc-400">{user ? <><strong className="text-emerald-300">{available}</strong> available</> : "Sign in to view balance"}</span></label>
+              <div className="relative mt-2">
+                <input id="prediction-stake" type="number" min={1} max={available || undefined} step={1} inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!authenticated || submitting} aria-describedby="stake-help" className="min-h-14 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 pr-14 text-lg font-mono text-zinc-50 outline-none focus:border-emerald-500 disabled:opacity-50" />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">FP</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="Quick stake amounts">
+                {quickStakes.map((value) => <button key={value} type="button" disabled={!authenticated || submitting} onClick={() => setAmount(String(value))} className="min-h-9 rounded-lg bg-zinc-800 px-3 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 disabled:opacity-40">{value === available ? `Max ${value}` : value}</button>)}
+              </div>
+              <p id="stake-help" className="mt-3 text-xs leading-5 text-zinc-500">FlashPoints are whole-number demo points. They cannot be purchased, transferred, withdrawn, or redeemed.</p>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 text-center text-xs">
+              <div><span className="block text-zinc-500">Selection</span><strong className={selection === "YES" ? "mt-1 block text-emerald-300" : "mt-1 block text-red-300"}>{selection}</strong></div>
+              <div><span className="block text-zinc-500">Stake</span><strong className="mt-1 block text-zinc-200">{amount || 0} FP</strong></div>
+              <div><span className="block text-zinc-500">After lock</span><strong className="mt-1 block text-zinc-200">{Math.max(0, available - (Number(amount) || 0))} FP</strong></div>
+            </div>
+
+            {error && <p role="alert" className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-3 text-sm text-red-200">{error}</p>}
+
+            {!connected ? (
+              <div className="mt-6 flex flex-col items-center gap-2 rounded-2xl bg-zinc-950/50 p-4"><p className="text-sm text-zinc-300">Connect a wallet to use your FlashPoints.</p><WalletMultiButton /></div>
+            ) : !authenticated ? (
+              <button type="button" disabled={authLoading} onClick={() => void signIn()} className="mt-6 min-h-14 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50">{authLoading ? "Waiting for signature…" : "Sign in to predict"}</button>
+            ) : (
+              <button type="button" disabled={submitting || !amount} onClick={() => void submit()} className="mt-6 min-h-14 w-full rounded-xl bg-emerald-500 font-bold text-zinc-950 shadow-lg shadow-emerald-950/30 hover:bg-emerald-400 disabled:opacity-50">{submitting ? "Locking FlashPoints…" : `Confirm ${selection} · Lock ${amount || "0"} FP`}</button>
+            )}
+            {submitting && <p role="status" className="mt-3 text-center text-xs text-zinc-400">Saving your prediction and updating your balance…</p>}
+          </>
+        )}
       </div>
     </div>
   );

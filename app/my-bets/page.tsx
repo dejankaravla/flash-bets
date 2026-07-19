@@ -1,5 +1,5 @@
-import { MyBetsContent } from "@/components/my-bets/my-bets-content";
+import { redirect } from "next/navigation";
 
-export default function MyBetsPage() {
-  return <MyBetsContent />;
+export default function LegacyMyBetsPage() {
+  redirect("/my-predictions");
 }

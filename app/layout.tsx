@@ -1,21 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { NavShell } from "@/components/nav-shell";
+import { ModeBanner } from "@/components/mode-banner";
+import { flashBetsMode } from "@/lib/app-mode";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "FlashBets",
-  description: "High-frequency decentralized micro-prediction markets for the World Cup",
+  description: "Live football micro-predictions using non-transferable FlashPoints",
 };
 
 export default function RootLayout({
@@ -23,13 +14,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const mode = flashBetsMode();
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-50">
-        <NavShell>{children}</NavShell>
+        <ModeBanner mode={mode} />
+        <NavShell mode={mode}>{children}</NavShell>
       </body>
     </html>
   );

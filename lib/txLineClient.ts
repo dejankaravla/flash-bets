@@ -4,330 +4,197 @@ import {
   txLineHeaders,
 } from "@/lib/txline-auth";
 import {
-  mergeOddsUpdate,
-  normalizeOddsLine,
   normalizeScoresUpdate,
-  type RawTxLineOdds,
   type RawTxLineScores,
 } from "@/lib/txline-normalize";
 import type {
-  MockTxLineSnapshot,
+  TxLineScoresUpdate,
   TxLineStreamMessage,
 } from "@/lib/types/txline";
+import { ingestTxLineScores } from "@/lib/server/market-service";
 
 const RECONNECT_DELAY_MS = 5_000;
-
-type StreamChannel = "scores" | "odds";
-type Listener = (msg: TxLineStreamMessage) => void;
-
-interface TxLineFixtureMeta {
-  participants: [string, string];
-}
+type Listener = (message: TxLineStreamMessage) => void;
 
 export interface TxLineClient {
-  subscribe(
-    fixtureId: string,
-    listener: (msg: TxLineStreamMessage) => void,
-  ): () => void;
+  subscribe(fixtureId: string, listener: Listener): () => void;
 }
 
-function parseSseChunk(
-  chunk: string,
-): { event?: string; data?: string } | null {
+function parseSseChunk(chunk: string): { event?: string; data?: string } | null {
   const trimmed = chunk.trim();
   if (!trimmed || trimmed.startsWith(":")) return null;
-
   let event: string | undefined;
-  let data: string | undefined;
-
+  const dataLines: string[] = [];
   for (const line of trimmed.split("\n")) {
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim();
-    } else if (line.startsWith("data:")) {
-      data = line.slice(5).trim();
-    }
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
   }
-
-  if (!data) return null;
-  return { event, data };
+  return dataLines.length > 0 ? { event, data: dataLines.join("\n") } : null;
 }
 
-function getParticipantsForFixture(
-  fixtureId: string,
-  meta: Record<string, TxLineFixtureMeta>,
-): [string, string] {
-  return meta[fixtureId]?.participants ?? ["Home", "Away"];
-}
-
-function totalListenerCount(listeners: Map<string, Set<Listener>>): number {
+function listenerCount(listeners: Map<string, Set<Listener>>): number {
   let count = 0;
-  for (const set of listeners.values()) {
-    count += set.size;
-  }
+  for (const set of listeners.values()) count += set.size;
   return count;
 }
 
 function createTxLineClient(): TxLineClient {
-  const snapshots: Record<string, MockTxLineSnapshot> = {};
+  const snapshots: Record<string, TxLineScoresUpdate> = {};
   const listeners = new Map<string, Set<Listener>>();
-  const fixtureMeta: Record<string, TxLineFixtureMeta> = {};
-
-  const abortControllers: Record<StreamChannel, AbortController | null> = {
-    scores: null,
-    odds: null,
-  };
-  const reconnectTimers: Record<StreamChannel, ReturnType<typeof setTimeout> | null> =
-    {
-      scores: null,
-      odds: null,
-    };
-  const reconnectScheduled: Record<StreamChannel, boolean> = {
-    scores: false,
-    odds: false,
-  };
-
-  let metaLoaded = false;
+  const fixtureParticipants: Record<string, [string, string]> = {};
   let upstreamActive = false;
+  let reconnectScheduled = false;
+  let abortController: AbortController | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let metaPromise: Promise<void> | null = null;
 
-  function broadcast(fixtureId: string, msg: TxLineStreamMessage): void {
-    const set = listeners.get(fixtureId);
-    if (!set) return;
-    for (const listener of set) {
-      listener(msg);
+  function broadcast(fixtureId: string, scores: TxLineScoresUpdate): void {
+    for (const listener of listeners.get(fixtureId) ?? []) {
+      listener({ type: "scores", data: scores });
     }
   }
 
-  function emitCached(fixtureId: string, listener: Listener): void {
-    const cached = snapshots[fixtureId];
-    if (!cached) return;
-    listener({ type: "scores", data: cached.scores });
-    listener({ type: "odds", data: cached.odds });
+  function participants(fixtureId: string): [string, string] {
+    return fixtureParticipants[fixtureId] ?? ["Home", "Away"];
   }
 
-  function handleScoresPayload(raw: RawTxLineScores): void {
+  function handleScores(raw: RawTxLineScores): void {
     const fixtureId = String(raw.fixtureId ?? raw.FixtureId ?? "");
     if (!fixtureId) return;
-
-    const participants = getParticipantsForFixture(fixtureId, fixtureMeta);
-    const scores = normalizeScoresUpdate(raw, participants);
+    const scores = normalizeScoresUpdate(raw, participants(fixtureId));
     if (!scores) return;
-
-    const existing = snapshots[fixtureId];
-    snapshots[fixtureId] = {
-      scores,
-      odds: existing?.odds ?? {
-        fixtureId: scores.fixtureId,
-        seq: 0,
-        ts: scores.ts,
-        markets: [],
-      },
-    };
-
-    broadcast(fixtureId, { type: "scores", data: scores });
+    const previous = snapshots[fixtureId];
+    const exactDuplicate =
+      previous &&
+      scores.seq === previous.seq &&
+      scores.ts === previous.ts &&
+      scores.matchPhase === previous.matchPhase &&
+      scores.matchMinute === previous.matchMinute &&
+      JSON.stringify(scores.stats) === JSON.stringify(previous.stats);
+    if (
+      previous &&
+      (scores.seq < previous.seq ||
+        (scores.seq === previous.seq && scores.ts < previous.ts) ||
+        exactDuplicate)
+    ) {
+      return;
+    }
+    snapshots[fixtureId] = scores;
+    void ingestTxLineScores(scores)
+      .then(() => broadcast(fixtureId, scores))
+      .catch(() => console.error("[txLineClient] failed to persist scores"));
   }
 
-  function handleOddsPayload(raw: RawTxLineOdds): void {
-    const line = normalizeOddsLine(raw);
-    if (!line) return;
-
-    const fixtureId = String(line.fixtureId);
-    const existing = snapshots[fixtureId];
-    const odds = mergeOddsUpdate(existing?.odds, line);
-
-    snapshots[fixtureId] = {
-      scores: existing?.scores ?? {
-        fixtureId: line.fixtureId,
-        seq: 0,
-        ts: line.ts,
-        gameState: 1,
-        matchMinute: 0,
-        participants: getParticipantsForFixture(fixtureId, fixtureMeta),
-        stats: { 1: 0, 2: 0 },
-      },
-      odds,
-    };
-
-    broadcast(fixtureId, { type: "odds", data: odds });
+  function scheduleReconnect(): void {
+    if (!upstreamActive || reconnectScheduled) return;
+    reconnectScheduled = true;
+    abortController?.abort();
+    abortController = null;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      reconnectScheduled = false;
+      if (upstreamActive && listenerCount(listeners) > 0) void consumeScoresStream();
+    }, RECONNECT_DELAY_MS);
   }
 
-  async function consumeSseStream(
-    channel: StreamChannel,
-    path: string,
-    onData: (payload: unknown) => void,
-  ): Promise<void> {
+  async function consumeScoresStream(): Promise<void> {
     const controller = new AbortController();
-    abortControllers[channel] = controller;
-
-    let response: Response;
+    abortController = controller;
     try {
-      response = await fetch(`${getTxLineApiUrl()}${path}`, {
+      const response = await fetch(`${getTxLineApiUrl()}/api/scores/stream`, {
         headers: txLineHeaders(),
         signal: controller.signal,
         cache: "no-store",
       });
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      scheduleReconnect(channel);
-      console.error(`[txLineClient] ${channel} connect failed`, error);
-      return;
-    }
-
-    if (!response.ok) {
-      if (controller.signal.aborted) return;
-      if (response.status === 429 || response.status >= 500) {
-        scheduleReconnect(channel);
-      } else {
-        console.error(
-          `[txLineClient] ${channel} HTTP ${response.status}`,
-          await response.text().catch(() => ""),
-        );
-        scheduleReconnect(channel);
+      if (!response.ok || !response.body) {
+        if (!controller.signal.aborted) scheduleReconnect();
+        return;
       }
-      return;
-    }
-
-    if (!response.body) {
-      scheduleReconnect(channel);
-      return;
-    }
-
-    reconnectScheduled[channel] = false;
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-
-        for (const part of parts) {
-          const parsed = parseSseChunk(part);
-          if (!parsed) continue;
-          if (parsed.event === "heartbeat") continue;
-
-          try {
-            onData(JSON.parse(parsed.data!));
-          } catch {
-            // Skip malformed payloads
+      reconnectScheduled = false;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+          const chunks = buffer.split("\n\n");
+          buffer = chunks.pop() ?? "";
+          for (const chunk of chunks) {
+            const parsed = parseSseChunk(chunk);
+            if (!parsed?.data || parsed.event === "heartbeat") continue;
+            try {
+              handleScores(JSON.parse(parsed.data) as RawTxLineScores);
+            } catch {
+              // Ignore malformed upstream messages without discarding the stream.
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } catch (error) {
+    } catch {
       if (!controller.signal.aborted) {
-        console.error(`[txLineClient] ${channel} stream error`, error);
+        console.error("[txLineClient] scores stream error");
       }
-    } finally {
-      reader.releaseLock();
     }
-
-    if (!controller.signal.aborted && upstreamActive) {
-      scheduleReconnect(channel);
-    }
-  }
-
-  function scheduleReconnect(channel: StreamChannel): void {
-    if (!upstreamActive || reconnectScheduled[channel]) return;
-    reconnectScheduled[channel] = true;
-
-    abortControllers[channel]?.abort();
-    abortControllers[channel] = null;
-
-    reconnectTimers[channel] = setTimeout(() => {
-      reconnectTimers[channel] = null;
-      reconnectScheduled[channel] = false;
-      if (upstreamActive && totalListenerCount(listeners) > 0) {
-        void startChannel(channel);
-      }
-    }, RECONNECT_DELAY_MS);
-  }
-
-  function startChannel(channel: StreamChannel): void {
-    if (channel === "scores") {
-      void consumeSseStream(channel, "/api/scores/stream", (payload) => {
-        handleScoresPayload(payload as RawTxLineScores);
-      });
-      return;
-    }
-
-    void consumeSseStream(channel, "/api/odds/stream", (payload) => {
-      handleOddsPayload(payload as RawTxLineOdds);
-    });
+    if (!controller.signal.aborted && upstreamActive) scheduleReconnect();
   }
 
   async function loadFixtureMeta(): Promise<void> {
-    if (metaLoaded || !hasTxLineCredentials()) return;
-
-    try {
+    if (metaPromise) return metaPromise;
+    metaPromise = (async () => {
       const url = new URL(`${getTxLineApiUrl()}/api/fixtures/snapshot`);
       const competitionId = process.env.TXLINE_COMPETITION_ID?.trim();
-      if (competitionId) {
-        url.searchParams.set("competitionId", competitionId);
+      if (competitionId) url.searchParams.set("competitionId", competitionId);
+      try {
+        const response = await fetch(url, { headers: txLineHeaders(), cache: "no-store" });
+        if (!response.ok) return;
+        const rows = (await response.json()) as Array<Record<string, unknown>>;
+        for (const row of rows) {
+          const id = row.FixtureId ?? row.fixtureId;
+          if (typeof id !== "number") continue;
+          const p1 = typeof (row.Participant1 ?? row.participant1) === "string" ? String(row.Participant1 ?? row.participant1) : "Home";
+          const p2 = typeof (row.Participant2 ?? row.participant2) === "string" ? String(row.Participant2 ?? row.participant2) : "Away";
+          const p1Home = (row.Participant1IsHome ?? row.participant1IsHome) !== false;
+          fixtureParticipants[String(id)] = p1Home ? [p1, p2] : [p2, p1];
+        }
+      } catch {
+        console.error("[txLineClient] fixture metadata unavailable");
       }
+    })();
+    return metaPromise;
+  }
 
-      const response = await fetch(url, {
+  async function loadSnapshot(fixtureId: string): Promise<void> {
+    try {
+      const response = await fetch(`${getTxLineApiUrl()}/api/scores/snapshot/${fixtureId}`, {
         headers: txLineHeaders(),
         cache: "no-store",
       });
-
       if (!response.ok) return;
-
-      const fixtures = (await response.json()) as Array<{
-        FixtureId?: number;
-        fixtureId?: number;
-        Participant1?: string;
-        Participant2?: string;
-        participant1?: string;
-        participant2?: string;
-        Participant1IsHome?: boolean;
-        participant1IsHome?: boolean;
-      }>;
-
-      for (const fixture of fixtures) {
-        const id = fixture.FixtureId ?? fixture.fixtureId;
-        if (id === undefined) continue;
-
-        const p1 = fixture.Participant1 ?? fixture.participant1 ?? "Home";
-        const p2 = fixture.Participant2 ?? fixture.participant2 ?? "Away";
-        const p1Home = fixture.Participant1IsHome ?? fixture.participant1IsHome ?? true;
-
-        fixtureMeta[String(id)] = {
-          participants: p1Home ? [p1, p2] : [p2, p1],
-        };
-      }
-
-      metaLoaded = true;
-    } catch (error) {
-      console.error("[txLineClient] fixture meta load failed", error);
+      const payload = await response.json();
+      const latest = Array.isArray(payload) ? payload[payload.length - 1] : payload;
+      if (latest && typeof latest === "object") handleScores(latest as RawTxLineScores);
+    } catch {
+      console.error("[txLineClient] score snapshot unavailable");
     }
   }
 
-  function startUpstream(): void {
-    if (upstreamActive) return;
+  function start(): void {
+    if (upstreamActive || !hasTxLineCredentials()) return;
     upstreamActive = true;
-    void loadFixtureMeta().finally(() => {
-      startChannel("scores");
-      startChannel("odds");
-    });
+    void loadFixtureMeta().finally(() => consumeScoresStream());
   }
 
-  function stopUpstream(): void {
+  function stop(): void {
     upstreamActive = false;
-
-    for (const channel of ["scores", "odds"] as const) {
-      reconnectScheduled[channel] = false;
-      if (reconnectTimers[channel]) {
-        clearTimeout(reconnectTimers[channel]!);
-        reconnectTimers[channel] = null;
-      }
-      abortControllers[channel]?.abort();
-      abortControllers[channel] = null;
-    }
+    reconnectScheduled = false;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    abortController?.abort();
+    abortController = null;
   }
 
   return {
@@ -337,27 +204,18 @@ function createTxLineClient(): TxLineClient {
         set = new Set();
         listeners.set(fixtureId, set);
       }
-
-      const isFirstGlobal = totalListenerCount(listeners) === 0;
+      const first = listenerCount(listeners) === 0;
       set.add(listener);
-      emitCached(fixtureId, listener);
-
-      if (isFirstGlobal) {
-        startUpstream();
-      }
+      const cached = snapshots[fixtureId];
+      if (cached) listener({ type: "scores", data: cached });
+      if (first) start();
+      void loadFixtureMeta().then(() => loadSnapshot(fixtureId));
 
       return () => {
         const current = listeners.get(fixtureId);
-        if (!current) return;
-
-        current.delete(listener);
-        if (current.size === 0) {
-          listeners.delete(fixtureId);
-        }
-
-        if (totalListenerCount(listeners) === 0) {
-          stopUpstream();
-        }
+        current?.delete(listener);
+        if (current?.size === 0) listeners.delete(fixtureId);
+        if (listenerCount(listeners) === 0) stop();
       };
     },
   };

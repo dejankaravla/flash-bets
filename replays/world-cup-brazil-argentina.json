@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "id": "world-cup-brazil-argentina",
+  "title": "Brazil vs Argentina — late winner",
+  "competition": "World Cup 2026 Demo",
+  "description": "A second-half excerpt with a goal inside the 85–90 minute market.",
+  "fixture": {
+    "fixtureId": 710001,
+    "participants": ["Brazil", "Argentina"],
+    "finalScore": [1, 0]
+  },
+  "durationMs": 780000,
+  "frameIntervalMs": 15000,
+  "timeline": [
+    {
+      "atMs": 0,
+      "update": {
+        "fixtureId": 710001,
+        "seq": 1,
+        "ts": 0,
+        "gameState": 4,
+        "matchPhase": "SECOND_HALF",
+        "sourceState": "H2",
+        "sourceTimestampTrusted": true,
+        "matchMinute": 80,
+        "participants": ["Brazil", "Argentina"],
+        "stats": { "1": 0, "2": 0, "7": 3, "8": 2 },
+        "availableStats": [1, 2, 7, 8],
+        "isComplete": true
+      }
+    },
+    {
+      "atMs": 420000,
+      "update": {
+        "fixtureId": 710001,
+        "seq": 29,
+        "ts": 420000,
+        "gameState": 4,
+        "matchPhase": "SECOND_HALF",
+        "sourceState": "H2",
+        "sourceTimestampTrusted": true,
+        "matchMinute": 87,
+        "participants": ["Brazil", "Argentina"],
+        "stats": { "1": 1, "2": 0, "7": 3, "8": 2 },
+        "availableStats": [1, 2, 7, 8],
+        "isComplete": true,
+        "event": { "type": "goal", "teamIndex": 0 }
+      }
+    },
+    {
+      "atMs": 600000,
+      "update": {
+        "fixtureId": 710001,
+        "seq": 41,
+        "ts": 600000,
+        "gameState": 4,
+        "matchPhase": "SECOND_HALF",
+        "sourceState": "H2",
+        "sourceTimestampTrusted": true,
+        "matchMinute": 90,
+        "participants": ["Brazil", "Argentina"],
+        "stats": { "1": 1, "2": 0, "7": 4, "8": 2 },
+        "availableStats": [1, 2, 7, 8],
+        "isComplete": true,
+        "event": { "type": "corner", "teamIndex": 0 }
+      }
+    },
+    {
+      "atMs": 720000,
+      "update": {
+        "fixtureId": 710001,
+        "seq": 49,
+        "ts": 720000,
+        "gameState": 4,
+        "matchPhase": "SECOND_HALF",
+        "sourceState": "H2",
+        "sourceTimestampTrusted": true,
+        "matchMinute": 92,
+        "participants": ["Brazil", "Argentina"],
+        "stats": { "1": 1, "2": 0, "7": 4, "8": 2 },
+        "availableStats": [1, 2, 7, 8],
+        "isComplete": true
+      }
+    },
+    {
+      "atMs": 780000,
+      "update": {
+        "fixtureId": 710001,
+        "seq": 53,
+        "ts": 780000,
+        "gameState": 5,
+        "matchPhase": "FINISHED",
+        "sourceState": "F",
+        "sourceTimestampTrusted": true,
+        "matchMinute": 93,
+        "participants": ["Brazil", "Argentina"],
+        "stats": { "1": 1, "2": 0, "7": 4, "8": 2 },
+        "availableStats": [1, 2, 7, 8],
+        "isComplete": true
+      }
+    }
+  ]
+}
+

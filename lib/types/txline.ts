@@ -1,3 +1,6 @@
+import type { MatchPhase } from "@/lib/domain/flash-bets";
+import type { ReplayState } from "@/lib/replay/types";
+
 export const GAME_PHASE = {
   NS: 1,
   H1: 2,
@@ -9,33 +12,13 @@ export const GAME_PHASE = {
 export const STAT_KEY = {
   P1_GOALS: 1,
   P2_GOALS: 2,
-  P1_YELLOW: 3,
-  P2_YELLOW: 4,
-  P1_RED: 5,
-  P2_RED: 6,
   P1_CORNERS: 7,
   P2_CORNERS: 8,
 } as const;
 
-export const GAME_PHASE_LABEL: Record<number, string> = {
-  [GAME_PHASE.NS]: "Not Started",
-  [GAME_PHASE.H1]: "First Half",
-  [GAME_PHASE.HT]: "Halftime",
-  [GAME_PHASE.H2]: "Second Half",
-  [GAME_PHASE.F]: "Full Time",
-};
-
-export type MatchEventType =
-  | "goal"
-  | "yellow_card"
-  | "red_card"
-  | "corner"
-  | "foul";
-
 export interface MatchEvent {
-  type: MatchEventType;
+  type: "goal" | "corner";
   teamIndex: 0 | 1;
-  player?: string;
 }
 
 export interface TxLineScoresUpdate {
@@ -43,29 +26,17 @@ export interface TxLineScoresUpdate {
   seq: number;
   ts: number;
   gameState: number;
+  matchPhase: MatchPhase;
+  sourceState: string | null;
+  sourceTimestampTrusted: boolean;
   matchMinute: number;
   participants: [string, string];
   stats: Record<number, number>;
+  availableStats: number[];
+  isComplete: boolean;
   event?: MatchEvent;
-}
-
-export interface TxLineOddsMarket {
-  marketId: string;
-  selections: { name: string; price: number }[];
-}
-
-export interface TxLineOddsUpdate {
-  fixtureId: number;
-  seq: number;
-  ts: number;
-  markets: TxLineOddsMarket[];
 }
 
 export type TxLineStreamMessage =
   | { type: "scores"; data: TxLineScoresUpdate }
-  | { type: "odds"; data: TxLineOddsUpdate };
-
-export interface MockTxLineSnapshot {
-  scores: TxLineScoresUpdate;
-  odds: TxLineOddsUpdate;
-}
+  | { type: "replay-state"; data: ReplayState };

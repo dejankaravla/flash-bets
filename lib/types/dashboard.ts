@@ -1,4 +1,4 @@
-export type DashboardSegment = "live" | "upcoming" | "finished";
+export type DashboardSegment = "live" | "replay" | "upcoming" | "finished" | "unavailable";
 
 export interface DashboardFixture {
   id: number;
@@ -14,6 +14,11 @@ export interface DashboardFixture {
   matchMinute?: number;
   gameState?: number;
   isInPlay?: boolean;
+  availabilityReason?: string;
+  sourceMode?: "LIVE" | "REPLAY";
+  replayId?: string;
+  replayStatus?: "AVAILABLE" | "PAUSED" | "PLAYING" | "FINISHED";
+  replayTitle?: string;
 }
 
 export function getFixturesBySegment(

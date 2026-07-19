@@ -1,99 +1,64 @@
-import {
-  computePoolSplit,
-  computePoolTotalUsdc,
-  formatCountdown,
-  formatWindowLabel,
-  getCardState,
-  getCardStateLabel,
-  getLockoutCountdownSeconds,
-  type MicroMarket,
-  type MicroMarketCardState,
-} from "@/lib/micro-markets";
+import { formatWindowLabel } from "@/lib/micro-markets";
+import type { Market, MarketStatus } from "@/lib/domain/flash-bets";
 
-interface MicroMarketCardProps {
-  market: MicroMarket;
-  estimatedMatchSeconds: number;
-  scoresSeq: number;
-  forceClosed?: boolean;
-  onSelect: (market: MicroMarket) => void;
-}
-
-const stateStyles: Record<MicroMarketCardState, string> = {
-  open: "border-zinc-700 bg-zinc-900 hover:border-emerald-500/50 cursor-pointer active:scale-[0.99]",
-  locked: "border-zinc-800 bg-zinc-900/60 opacity-70 cursor-not-allowed",
-  in_progress: "border-amber-500/30 bg-zinc-900/60 opacity-80 cursor-not-allowed",
-  closed: "border-zinc-800/50 bg-zinc-900/40 opacity-50 cursor-not-allowed",
+const stateStyles: Record<MarketStatus, string> = {
+  CREATED: "border-zinc-800 bg-zinc-900/60",
+  OPEN: "border-emerald-500/35 bg-gradient-to-br from-zinc-900 to-emerald-950/15 hover:-translate-y-0.5 hover:border-emerald-400/70 hover:shadow-xl hover:shadow-emerald-950/20 active:translate-y-0",
+  LOCKED: "border-zinc-800 bg-zinc-900/70",
+  WAITING_FOR_SETTLEMENT: "border-amber-500/30 bg-amber-950/10",
+  SETTLED: "border-emerald-500/25 bg-emerald-950/10",
+  VOID: "border-zinc-700 bg-zinc-900/60",
 };
 
-export function MicroMarketCard({
-  market,
-  estimatedMatchSeconds,
-  scoresSeq,
-  forceClosed = false,
-  onSelect,
-}: MicroMarketCardProps) {
-  const state = getCardState(market, estimatedMatchSeconds, forceClosed);
-  const stateLabel = getCardStateLabel(state);
-  const countdown = getLockoutCountdownSeconds(market, estimatedMatchSeconds);
-  const { yesPct, noPct } = computePoolSplit(scoresSeq);
-  const poolTotal = computePoolTotalUsdc(scoresSeq);
+const stateLabels: Record<MarketStatus, string> = {
+  CREATED: "Upcoming",
+  OPEN: "Open now",
+  LOCKED: "Prediction locked",
+  WAITING_FOR_SETTLEMENT: "Settlement pending",
+  SETTLED: "Settled",
+  VOID: "Voided",
+};
 
-  const handleClick = () => {
-    if (state === "open") onSelect(market);
-  };
+const stateHelp: Record<MarketStatus, string> = {
+  CREATED: "This window will open when its lead period begins.",
+  OPEN: "Choose Yes or No and lock your FlashPoints.",
+  LOCKED: "No more predictions can be placed for this window.",
+  WAITING_FOR_SETTLEMENT: "The correction delay is running. Settlement is automatic.",
+  SETTLED: "Open My Predictions to review your receipt.",
+  VOID: "Locked FlashPoints are refunded automatically.",
+};
+
+export function MicroMarketCard({ market, onSelect }: { market: Market; onSelect: (market: Market) => void }) {
+  const open = market.status === "OPEN";
+  const statusTone = open
+    ? "bg-emerald-500/15 text-emerald-300"
+    : market.status === "WAITING_FOR_SETTLEMENT"
+      ? "bg-amber-500/15 text-amber-200"
+      : market.status === "SETTLED"
+        ? "bg-emerald-500/10 text-emerald-200"
+        : "bg-zinc-800 text-zinc-300";
 
   return (
     <button
       type="button"
-      onClick={handleClick}
-      disabled={state !== "open"}
-      className={`w-full rounded-2xl border p-4 text-left transition-all ${stateStyles[state]}`}
+      onClick={() => open && onSelect(market)}
+      disabled={!open}
+      aria-label={`${market.question}, ${formatWindowLabel(market.startMinute, market.endMinute)}, ${stateLabels[market.status]}`}
+      className={`min-h-40 w-full rounded-3xl border p-5 text-left transition-all disabled:cursor-default ${stateStyles[market.status]}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-            {formatWindowLabel(market.windowStart, market.windowEnd)}
-          </p>
-          <p className="mt-1 text-base font-semibold text-zinc-100">
-            {market.proposition}
-          </p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">{formatWindowLabel(market.startMinute, market.endMinute)}</p>
+          <p className="mt-2 text-base font-semibold leading-6 text-zinc-50">{market.question}</p>
         </div>
-        {state === "open" && (
-          <span className="shrink-0 rounded-lg bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-400">
-            Locks in {formatCountdown(countdown)}
-          </span>
-        )}
-        {stateLabel && (
-          <span
-            className={`shrink-0 rounded-lg px-2 py-1 text-xs font-bold uppercase tracking-wide ${
-              state === "locked"
-                ? "bg-red-500/15 text-red-400"
-                : state === "in_progress"
-                  ? "bg-amber-500/15 text-amber-400"
-                  : "bg-zinc-800 text-zinc-500"
-            }`}
-          >
-            {stateLabel}
-          </span>
-        )}
+        <span className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusTone}`}>{stateLabels[market.status]}</span>
       </div>
-
-      <div className="mt-4">
-        <div className="mb-1.5 flex justify-between text-xs text-zinc-500">
-          <span>YES {yesPct.toFixed(0)}%</span>
-          <span>${poolTotal.toLocaleString()} USDC</span>
-          <span>NO {noPct.toFixed(0)}%</span>
+      <div className="mt-5 flex items-end justify-between gap-4 border-t border-zinc-800/80 pt-4">
+        <div>
+          <p className="text-xs font-bold text-zinc-300">YES <span className="mx-1 text-zinc-600">or</span> NO</p>
+          <p className="mt-1 text-xs text-zinc-500">{market.type === "GOAL" ? "Goal event" : "Corner event"} · FlashPoints</p>
         </div>
-        <div className="flex h-2.5 overflow-hidden rounded-full bg-zinc-800">
-          <div
-            className="bg-emerald-500 transition-[width] duration-700 ease-out"
-            style={{ width: `${yesPct}%` }}
-          />
-          <div
-            className="bg-red-500 transition-[width] duration-700 ease-out"
-            style={{ width: `${noPct}%` }}
-          />
-        </div>
+        <p className={`max-w-48 text-right text-xs leading-5 ${open ? "font-semibold text-emerald-300" : "text-zinc-400"}`}>{stateHelp[market.status]}</p>
       </div>
     </button>
   );
